@@ -2,6 +2,30 @@
 
 This project explores whether a small language model (SLM), running step-by-step under constrained decoding, can follow a branching, tool-driven procedure that lives directly in its weights, matching a large frontier model that carries the entire procedure in its prompt, at a fraction of the cost and latency.
 
+Here's a detailed write-up on the same: [Compiling a Workflow into a 3B Model](https://arpitbhayani.me/blogs/compiling-an-sop-into-a-3b-model/).
+
+TL;DR: Compiling a 3,500-token Standard Operating Procedure (Workflow) into a QLoRA-tuned 3B model hit 93.0% end-to-end accuracy (vs. 92.0% on Gemini 2.5 Pro) while cutting input tokens by 91.3% (5,200 → 450) and cost by 8.4x ($1.85 → $0.22 per 1k incidents).
+
+```
+End-to-End Success Rate (500 Test Scenarios — Higher is Better)
+─────────────────────────────────────────────────────────────────────────────
+Fine-Tuned 3B SLM (This Run)  [████████████████████████████░░]  93.0% (465/500)
+Gemini 2.5 Pro (With Cache)   [███████████████████████████░░░]  92.0% (460/500)
+Gemini 2.5 Pro (Raw API)      [███████████████████████████░░░]  90.0% (450/500)
+Untuned Qwen 2.5 3B Base      [██████░░░░░░░░░░░░░░░░░░░░░░░░]  20.0% (100/500)
+
+Average Input Tokens per Incident (Lower is Better)
+─────────────────────────────────────────────────────────────────────────────
+Prompt-Driven Setups (SOP)    [██████████████████████████████]  5,200 tokens
+Fine-Tuned 3B SLM (Compiled)  [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]    450 tokens (-91.3%)
+
+Cost per 1,000 Incidents (Lower is Better)
+─────────────────────────────────────────────────────────────────────────────
+Gemini 2.5 Pro (Raw API)      [██████████████████████████████]  $3.50+
+Gemini 2.5 Pro (With Cache)   [████████████████░░░░░░░░░░░░░░]  $1.85
+Fine-Tuned 3B SLM (This Run)  [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  $0.22  (8.4x cheaper)
+```
+
 ---
 
 ## Key Experimental Results
