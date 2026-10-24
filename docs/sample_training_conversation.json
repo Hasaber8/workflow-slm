@@ -1,0 +1,58 @@
+{
+  "id": "scen_train_01765",
+  "description": "Representative training conversation record from artifacts/sft/train.jsonl used for QLoRA SFT fine-tuning",
+  "messages": [
+    {
+      "role": "system",
+      "content": "incident_triage_v1"
+    },
+    {
+      "role": "user",
+      "content": "Received: 2026-10-23T03:28:00Z\nALERT: user profile svc latency spike in virginia starting at 2026-10-23T03:03:00Z"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"extract_alert\",\"service\":\"user-profile\",\"symptom\":\"high_latency\",\"region\":\"us-east\",\"started_at\":\"2026-10-23T03:03:00Z\",\"started_minutes_ago\":null}"
+    },
+    {
+      "role": "user",
+      "content": "TOOL_RESULT: continue"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"get_metrics\",\"service\":\"user-profile\",\"metric\":\"latency_p99\",\"window_minutes\":30}"
+    },
+    {
+      "role": "user",
+      "content": "TOOL_RESULT: {\"tool\":\"get_metrics\",\"service\":\"user-profile\",\"metric\":\"latency_p99\",\"window_minutes\":30,\"current\":244.88,\"baseline\":46.37,\"change_pct\":428.1,\"status\":\"critical\"}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"get_recent_deploys\",\"service\":\"user-profile\",\"window_minutes\":120}"
+    },
+    {
+      "role": "user",
+      "content": "TOOL_RESULT: {\"tool\":\"get_recent_deploys\",\"service\":\"user-profile\",\"window_minutes\":120,\"deploys\":[{\"id\":\"d-5151\",\"kind\":\"code\",\"version\":\"v2.6.5\",\"minutes_before_start\":22}],\"correlated\":true,\"correlated_deploy_id\":\"d-5151\",\"correlated_kind\":\"code\"}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"query_logs\",\"service\":\"user-profile\",\"window_minutes\":30}"
+    },
+    {
+      "role": "user",
+      "content": "TOOL_RESULT: {\"tool\":\"query_logs\",\"service\":\"user-profile\",\"window_minutes\":30,\"lines\":[\"15:21:10 ERROR [user-profile] ZeroDivisionError: integer division or modulo by zero at handler_214.py [seq=29]\",\"level=error ts=2026-10-22T12:00:00Z service=user-profile msg=\\\"panic recovered: runtime error: invalid memory address\\\" [seq=27]\",\"15:21:16 FATAL [user-profile] uncaught exception: TypeError: Cannot read properties of undefined (reading 'id') [seq=36]\",\"15:21:19 INFO [user-profile] Auto-renewal of telemetry session completed [seq=46]\",\"{\\\"level\\\":\\\"error\\\",\\\"service\\\":\\\"user-profile\\\",\\\"error\\\":\\\"IndexOutOfBoundsException: index 480 out of range\\\"}\"]}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"conclude\",\"root_cause\":\"bad_deploy\",\"runbook_id\":\"RB-101\",\"culprit\":\"d-5151\",\"log_signature\":\"unhandled_exception\"}"
+    },
+    {
+      "role": "user",
+      "content": "TOOL_RESULT: {\"tool\":\"decision\",\"severity\":\"sev2\",\"action\":\"page_oncall\",\"team\":\"team-identity\",\"runbook_title\":\"Roll back the deploy\"}"
+    },
+    {
+      "role": "assistant",
+      "content": "{\"step\":\"draft_summary\",\"text\":\"SEV2: user-profile root cause bad_deploy. Follow RB-101. Team team-identity. Culprit: d-5151.\"}"
+    }
+  ]
+}

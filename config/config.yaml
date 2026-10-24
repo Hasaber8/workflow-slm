@@ -1,0 +1,84 @@
+seed: 1234
+profile: full            # full or smoke
+
+teacher:
+  provider: gemini
+  model: gemini-2.5-pro
+  concurrency: 8
+  max_retries: 5
+  max_api_calls: 150000
+  max_api_spend_usd: 300     # placeholder guard
+  prompt_caching: true
+  trace_source: teacher      # teacher, or oracle (ablation 3)
+
+baseline:
+  provider: gemini
+  model: gemini-2.5-pro   # baselines A and B use the same model, caching off and on
+
+local:
+  base_model: Qwen/Qwen2.5-3B-Instruct
+  served_name: base
+  vllm_port: 8000
+  max_model_len: 4096        # adapted for 12GB RTX 3060
+  gpu_memory_utilization: 0.80
+  enable_thinking: false
+
+runtime:
+  max_steps: 16
+
+data:
+  n_scenarios: 6000
+  n_train: 4000
+  n_dev: 400
+  n_test: 500
+  n_shift: 500
+  n_probe: 100
+  heldout_services: [shipping-svc, notification-svc]
+  heldout_service_fraction_eval: 0.25   # share of test and shift scenarios on held-out services
+  train_styles: [pagerduty_style, slack_message, email_notification, oncall_free_text, terse_sms]
+  shift_style: handoff_note
+  root_cause_weights:
+    bad_deploy: 14
+    config_change_error: 8
+    upstream_dependency_failure: 18
+    resource_exhaustion: 10
+    db_pool_exhausted: 9
+    traffic_spike: 9
+    credential_failure: 6
+    transient_noise: 12
+    unknown: 14
+  transient_error_fraction: 0.10     # one tool call fails once, then succeeds on retry
+  persistent_error_fraction: 0.03    # one tool call fails twice
+  distractor_deploy_fraction: 0.10   # a correlated deploy that is not the cause
+  log_bank_lines_per_signature: 40
+  log_bank_benign_lines: 60
+  min_traces_per_branch: 100
+
+train:
+  max_seq_length: 2048
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.0
+  learning_rate: 2.0e-4
+  epochs: 3
+  per_device_batch: 2
+  grad_accum: 16
+  warmup_ratio: 0.03
+  load_in_4bit: true
+  gradient_checkpointing: true
+
+eval:
+  latency_concurrency: 1
+  throughput_concurrency: 16
+  bootstrap_samples: 2000
+  gpu_hourly_usd: null     # fill in to get amortized local cost
+  kwh_price_usd: null      # fill in to get energy cost
+
+smoke:
+  n_scenarios: 60
+  n_train: 36
+  n_dev: 6
+  n_test: 10
+  n_shift: 6
+  n_probe: 2
+  train_max_steps: 20
