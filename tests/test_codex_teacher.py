@@ -110,6 +110,37 @@ def test_codex_failures_stop_the_batch(cli, failure):
         codex.CodexClient().complete([], {})
 
 
+@pytest.mark.parametrize("diagnostic", [
+    {"type": "error", "message": "Reconnecting... 2/5 (403 Forbidden on WebSocket)"},
+    {"type": "turn.failed", "error": {"message": "Recoverable earlier turn failure"}},
+])
+def test_codex_accepts_a_valid_completed_turn_after_recovery(cli, diagnostic):
+    cli["events"].insert(0, diagnostic)
+    text, usage = codex.CodexClient().complete([], {})
+    assert json.loads(text)["step"] == "get_metrics"
+    assert usage["input_tokens"] == 100
+    assert usage["recovered_cli_warnings"] == 1
+
+
+def test_codex_rejects_diagnostics_without_a_completed_turn(cli):
+    cli["events"] = [{"type": "error", "message": "403 Forbidden"}]
+    with pytest.raises(codex.CodexError, match="403 Forbidden"):
+        codex.CodexClient().complete([], {})
+
+
+def test_codex_requires_the_final_turn_to_succeed(cli):
+    cli["events"].append({"type": "turn.failed", "error": {"message": "final failure"}})
+    with pytest.raises(codex.CodexError, match="final failure"):
+        codex.CodexClient().complete([], {})
+
+
+@pytest.mark.parametrize("tool", ["command_execution", "mcp_tool_call", "web_search", "file_change"])
+def test_codex_never_ignores_external_tool_use_even_if_the_turn_completes(cli, tool):
+    cli["events"].insert(0, {"type": "item.completed", "item": {"type": tool}})
+    with pytest.raises(codex.CodexError, match="external tool"):
+        codex.CodexClient().complete([], {})
+
+
 @pytest.fixture
 def teacher_batch(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
@@ -243,6 +274,13 @@ def test_parallel_failure_drains_and_checkpoints_other_workers(teacher_batch, mo
     assert summary["pass_count"] == 2
     assert summary["fail_count"] == 1
     assert summary["incomplete"] is True
+    assert summary["pass_rate"] is None
+    assert summary["checkpoint_coverage"] == 0.4
+    assert summary["attempted_count"] == 3
+    assert summary["new_attempt_count"] == 3
+    assert summary["not_attempted_count"] == 2
+    assert summary["request_error_count"] == 1
+    assert summary["validation_fail_count"] == 0
 
 
 @pytest.mark.parametrize("workers", [2, 10])

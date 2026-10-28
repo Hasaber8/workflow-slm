@@ -114,23 +114,34 @@ class CodexClient:
                 raise CodexError(f"Unable to run Codex CLI: {exc}") from exc
 
             usage = None
-            errors = []
+            diagnostics = []
+            terminal_status = None
+            tool_violations = []
             for line in result.stdout.splitlines():
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(event, dict):
+                    continue
                 if event.get("type") == "turn.completed":
+                    terminal_status = "completed"
                     usage = event.get("usage")
-                elif event.get("type") in ("error", "turn.failed"):
-                    errors.append(str(event.get("message") or event.get("error") or event))
+                elif event.get("type") == "turn.failed":
+                    terminal_status = "failed"
+                    diagnostics.append(str(event.get("error") or event))
+                elif event.get("type") == "error":
+                    # The CLI emits error events while reconnecting, including
+                    # before successfully falling back from WebSocket to HTTP.
+                    # Only the final turn/process state determines failure.
+                    diagnostics.append(str(event.get("message") or event))
                 elif event.get("type") == "item.completed":
                     item = event.get("item", {})
                     if item.get("type") in ("command_execution", "mcp_tool_call", "web_search", "file_change"):
-                        errors.append("Codex attempted an external tool; rejecting this teacher response.")
+                        tool_violations.append("Codex attempted an external tool; rejecting this teacher response.")
 
-            if result.returncode or errors:
-                detail = "; ".join(errors) or result.stderr.strip()[-2000:] or "No diagnostic output."
+            if result.returncode or terminal_status != "completed" or tool_violations:
+                detail = "; ".join(tool_violations + diagnostics) or result.stderr.strip()[-2000:] or "No completed turn."
                 raise CodexError(f"Codex request failed (exit {result.returncode}): {detail}")
             if not output_file.is_file():
                 raise CodexError("Codex returned no structured response; check CLI login and usage limits.")
@@ -147,4 +158,5 @@ class CodexClient:
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": counters.get("cached_input_tokens", 0),
             "usage_available": usage is not None,
+            "recovered_cli_warnings": len(diagnostics),
         }

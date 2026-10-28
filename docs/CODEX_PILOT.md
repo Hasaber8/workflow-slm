@@ -81,6 +81,17 @@ speedup yet. After reviewing the pilot, a bounded throughput test is:
 make traces TRACE_ARGS="--limit 200 --workers 10"
 ```
 
+The first 200-target attempt stopped with 101 accepted checkpoints, one
+validation rejection, ten CLI errors, and 88 scenarios not attempted. Its
+50.5% figure was checkpoint coverage, not a completed-batch acceptance rate.
+The failure exposed a wrapper bug: reconnect `error` diagnostics, including
+WebSocket 403 responses, were treated as terminal even with CLI exit code zero.
+The wrapper now requires successful process exit, a final `turn.completed`,
+valid structured output, and no external-tool violations; recoverable diagnostics
+alone no longer reject a successful completion. A single live transport smoke
+request passed after the fix. Neither a completed 200-scenario result nor a
+ten-worker live speedup is claimed here.
+
 Do not run another writer against the same trace directory. Neither the full
 4,000-scenario generation nor model training was started as part of this pilot.
 Raw traces, backups, model weights, and login credentials are not committed.

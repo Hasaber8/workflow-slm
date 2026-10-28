@@ -213,6 +213,13 @@ quota, timeout, and CLI failures stop the batch instead of failing thousands of
 scenarios: no new scenarios are scheduled after a Codex failure, but all already
 submitted workers are drained and their successful traces checkpointed before
 the batch exits. Run only one trace process per output directory.
+Codex reconnect diagnostics are not fatal if the process exits successfully,
+its final turn completes, and the final JSON step validates. External-tool
+violations and genuinely failed/incomplete turns still stop the batch.
+Interrupted summaries report `pass_rate: null` and separate request errors,
+validation failures, and unattempted scenarios; `checkpoint_coverage` is not
+a completed-batch acceptance rate. Recovered diagnostic counts are recorded
+as `recovered_cli_warnings` in each step's usage.
 Saved accepted traces are revalidated with the current validators on resume.
 Existing accepted traces from a different teacher, dataset, SOP, or
 Codex version are not mixed in: back them up first, then explicitly pass `--fresh`

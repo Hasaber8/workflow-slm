@@ -267,12 +267,21 @@ def run_teacher_traces(
     total = len(scenarios)
     n_pass = len(pass_traces)
     pass_rate = (n_pass / total) if total > 0 else 0.0
+    attempted_count = n_pass + len(fail_traces)
+    request_error_count = sum("error" in trace for trace in fail_traces)
+    validation_fail_count = len(fail_traces) - request_error_count
 
     summary = {
         "total": total,
         "pass_count": n_pass,
         "fail_count": len(fail_traces),
-        "pass_rate": round(pass_rate, 4),
+        "pass_rate": None if fatal_error else round(pass_rate, 4),
+        "checkpoint_coverage": round(pass_rate, 4),
+        "attempted_count": attempted_count,
+        "new_attempt_count": attempted_count - resumed_count,
+        "not_attempted_count": total - attempted_count,
+        "request_error_count": request_error_count,
+        "validation_fail_count": validation_fail_count,
         "duration_sec": round(duration, 2),
         "teacher": teacher,
         "resumed_count": resumed_count,
@@ -283,9 +292,14 @@ def run_teacher_traces(
     with open(TRACES_DIR / "summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    print(f"Teacher trace generation completed: {n_pass}/{total} passed ({pass_rate*100:.1f}%) in {duration:.1f}s")
     if fatal_error:
+        print(
+            f"Teacher batch interrupted after {duration:.1f}s: {n_pass} accepted checkpoints, "
+            f"{validation_fail_count} validation failures, {request_error_count} request errors, "
+            f"{total - attempted_count} not attempted (target={total}). No complete-batch pass rate."
+        )
         raise CodexError(f"Teacher batch stopped: {fatal_error} Accepted traces are saved; rerun to resume.")
+    print(f"Teacher trace generation completed: {n_pass}/{total} passed ({pass_rate*100:.1f}%) in {duration:.1f}s")
     if pass_rate < 0.50:
         detail = next((t["error"] for t in fail_traces if "error" in t), "Trace validation failed.")
         raise ValueError(
