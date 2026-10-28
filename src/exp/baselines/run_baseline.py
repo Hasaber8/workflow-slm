@@ -2,8 +2,9 @@ import json
 from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from exp.config import load_config
+from exp.prompts import load_sop_prompt
 from exp.data.split import scenario_from_dict
 from exp.runtime.clients import FakeClient, GeminiClient, VllmClient
 from exp.runtime.escalate import maybe_escalate
@@ -26,11 +27,12 @@ def run_baseline_on_split(
     client: Any,
     system_prompt: Optional[str] = None,
     limit: Optional[int] = None,
-    fallback_client: Optional[Any] = None
+    fallback_client: Optional[Any] = None,
+    client_factory: Optional[Callable[[Scenario], Any]] = None,
 ) -> Dict[str, Any]:
     BASELINES_DIR.mkdir(parents=True, exist_ok=True)
     split_file = DATA_DIR / f"{split_name}.jsonl"
-    sop_prompt = SOP_FILE.read_text(encoding="utf-8") if system_prompt is None else system_prompt
+    sop_prompt = load_sop_prompt(SOP_FILE) if system_prompt is None else system_prompt
 
     scenarios: List[Scenario] = []
     with open(split_file, "r", encoding="utf-8") as f:
@@ -51,9 +53,10 @@ def run_baseline_on_split(
 
     for scen in scenarios:
         sim = Simulator(scen)
+        scenario_client = client_factory(scen) if client_factory else client
         res = run(
             raw_input=scen.rendered_alert or f"Received: {scen.received_at}\nAlert on {scen.service}",
-            client=client,
+            client=scenario_client,
             world=sim,
             system_prompt=sop_prompt
         )
@@ -139,5 +142,7 @@ if __name__ == "__main__":
             for line in f:
                 if line.strip():
                     test_scens.append(scenario_from_dict(json.loads(line)))
-    client = FakeClient(response_fn=create_oracle_teacher_responder(test_scens[0]) if test_scens else None)
-    run_baseline_on_split("Baseline_B", split_name, client, limit=10)
+    run_baseline_on_split(
+        "oracle", split_name, client=None, limit=10,
+        client_factory=lambda scen: FakeClient(response_fn=create_oracle_teacher_responder(scen)),
+    )

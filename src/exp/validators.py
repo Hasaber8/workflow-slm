@@ -34,7 +34,7 @@ def validate_v1_schema(trace: List[Dict[str, Any]]) -> Tuple[bool, str]:
 
 
 def validate_v2_trajectory(trace: List[Dict[str, Any]], expected_extraction: Dict[str, Any]) -> Tuple[bool, str]:
-    """V2: Every non-conclude step after extraction equals expected_next(...) for the history."""
+    """V2: Follow the complete procedure, then conclude and immediately summarize."""
     if len(trace) < 2:
         return False, "trace_too_short"
 
@@ -46,13 +46,19 @@ def validate_v2_trajectory(trace: List[Dict[str, Any]], expected_extraction: Dic
 
     for i in range(1, len(trace)):
         curr_step = trace[i].get("step", {})
-        if curr_step.get("step") in ("conclude", "draft_summary"):
-            break
-
         exp_action, branch_label = expected_next(expected_extraction, history)
         # Check action equivalence
         if curr_step.get("step") != exp_action.get("step"):
             return False, f"step_{i}_type_mismatch: got {curr_step.get('step')}, expected {exp_action.get('step')} ({branch_label})"
+
+        if curr_step.get("step") == "conclude":
+            # V4 checks the conclusion fields. V2 checks that the procedure has
+            # actually reached a conclusion and the episode terminates correctly.
+            if i + 1 >= len(trace) or trace[i + 1].get("step", {}).get("step") != "draft_summary":
+                return False, "conclude_must_be_followed_by_summary"
+            if i + 2 != len(trace):
+                return False, "unexpected_steps_after_summary"
+            return True, "ok"
 
         for k, v in exp_action.items():
             if curr_step.get(k) != v:
@@ -66,7 +72,7 @@ def validate_v2_trajectory(trace: List[Dict[str, Any]], expected_extraction: Dic
                 pub_with_truth[tk] = tv
         history.append((curr_step, pub_with_truth))
 
-    return True, "ok"
+    return False, "missing_conclude_and_summary"
 
 
 def validate_v3_extraction(trace: List[Dict[str, Any]], ground_truth: Dict[str, Any]) -> Tuple[bool, str]:

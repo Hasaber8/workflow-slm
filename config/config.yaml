@@ -2,9 +2,12 @@ seed: 1234
 profile: full            # full or smoke
 
 teacher:
-  provider: gemini
-  model: gemini-2.5-pro
-  concurrency: 8
+  provider: codex
+  model: gpt-6.1-terra
+  codex_command: codex       # native CLI; authenticate with codex login (ChatGPT)
+  timeout_seconds: 300
+  concurrency: 10            # parallel scenarios; turns within each scenario remain sequential
+  resume: true               # reuse matching accepted traces, checkpoint each completion
   max_retries: 5
   max_api_calls: 150000
   max_api_spend_usd: 300     # placeholder guard

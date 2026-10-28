@@ -1,9 +1,18 @@
 from pathlib import Path
 import pytest
+from exp.data import log_bank, split
 from exp.data.log_bank import build_log_bank, validate_log_line
 from exp.data.render import render_alert_templated
 from exp.data.split import generate_all_splits
 from exp.world.services import HELDOUT_SERVICES, TRAIN_SERVICES
+
+
+@pytest.fixture(autouse=True)
+def isolate_generated_artifacts(tmp_path, monkeypatch):
+    # Generator tests must never replace real scenario splits or log banks.
+    monkeypatch.setattr(log_bank, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(log_bank, "LOG_BANK_FILE", tmp_path / "log_bank.json")
+    monkeypatch.setattr(split, "DATA_DIR", tmp_path)
 
 
 def test_log_bank_validity():

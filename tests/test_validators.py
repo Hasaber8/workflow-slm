@@ -39,6 +39,11 @@ def test_v2_trajectory_pass_and_fails():
         {"step": {"step": "extract_alert", **ext_dict}},
         {"step": {"step": "get_metrics", "service": "checkout-api", "metric": "error_rate", "window_minutes": 30}, "result": {"status": "critical"}},
         {"step": {"step": "get_recent_deploys", "service": "checkout-api", "window_minutes": 120}, "result": {"correlated": False, "correlated_deploy_id": None, "correlated_kind": None}},
+        {"step": {"step": "query_logs", "service": "checkout-api", "window_minutes": 30},
+         "result": {"lines": []}, "truth": {"_sig": "auth_failure"}},
+        {"step": {"step": "conclude", "root_cause": "credential_failure", "runbook_id": "RB-401",
+                  "culprit": None, "log_signature": "auth_failure"}},
+        {"step": {"step": "draft_summary", "text": "Credential failure."}},
     ]
     ok, _ = validate_v2_trajectory(trace_pass, ext_dict)
     assert ok is True
@@ -58,6 +63,55 @@ def test_v2_trajectory_pass_and_fails():
     ]
     ok2, _ = validate_v2_trajectory(trace_fail2, ext_dict)
     assert ok2 is False
+
+
+@pytest.mark.parametrize("ending", ["premature_conclusion", "prefix_only", "missing_summary", "extra_step"])
+def test_v2_rejects_incomplete_or_nonterminal_trajectories(ending):
+    extraction = {"service": "checkout-api", "symptom": "high_error_rate"}
+    trace = [
+        {"step": {"step": "extract_alert", **extraction}},
+        {"step": {"step": "get_metrics", "service": "checkout-api", "metric": "error_rate", "window_minutes": 30},
+         "result": {"status": "normal"}},
+        {"step": {"step": "conclude", "root_cause": "transient_noise", "runbook_id": "RB-001"}},
+        {"step": {"step": "draft_summary", "text": "Transient noise."}},
+    ]
+    if ending == "premature_conclusion":
+        del trace[1]
+    elif ending == "prefix_only":
+        trace = trace[:2]
+    elif ending == "missing_summary":
+        trace = trace[:3]
+    else:
+        trace.append(trace[-1])
+    assert validate_v2_trajectory(trace, extraction)[0] is False
+
+
+def test_all_validators_reject_a_lucky_diagnosis_without_diagnostic_calls():
+    import random
+    from exp.validators import validate_trace
+    from exp.world.policy import triage_decision
+    from exp.world.procedure import expected_next
+    from exp.world.scenarios import compute_oracle_trajectory, generate_scenario
+
+    scenario = generate_scenario(
+        "lucky_guess", random.Random(7), force_root_cause="credential_failure",
+        transient_error_fraction=0, persistent_error_fraction=0,
+    )
+    history, _ = compute_oracle_trajectory(scenario)
+    conclusion, _ = expected_next(scenario.expected_extraction, history)
+    decision = triage_decision(scenario.service, None, conclusion["root_cause"], conclusion["culprit"])
+    trace = [
+        {"step": scenario.expected_extraction},
+        {"step": conclusion, "decision": decision},
+        {"step": {"step": "draft_summary", "text":
+            f"{decision['severity'].upper()}: {scenario.service} credential failure. "
+            f"Follow RB-401. Team {decision['team']}."}},
+    ]
+    ok, report = validate_trace(trace, {"expected_extraction": scenario.expected_extraction, **conclusion})
+    assert history
+    assert ok is False
+    assert report["V2"]["ok"] is False
+    assert all(check["ok"] for name, check in report.items() if name != "V2")
 
 
 # --- V3 Extraction ---
@@ -179,6 +233,29 @@ def test_v7_summary_safe_pass_and_fails():
     ]
     ok2, msg2 = validate_v7_summary_safe(trace_f2)
     assert ok2 is False
+
+
+def test_v7_rejects_unverified_alert_number_but_accepts_normalized_symptom():
+    # The raw alert's HTTP 500 code is not retained in normalized extraction.
+    # Keep the verified-facts rule rather than whitelisting alert numbers.
+    trace = [
+        {"step": {"step": "extract_alert", "service": None, "symptom": "high_error_rate",
+                  "region": "us-west", "started_minutes_ago": 27}},
+        {"step": {"step": "conclude", "root_cause": "unknown", "runbook_id": "RB-900"},
+         "decision": {"severity": "sev3", "team": "sre-oncall"}},
+        {"step": {"step": "draft_summary", "text":
+            "SEV3: Elevated 500 responses in us-west began 27 minutes ago. "
+            "Root cause is unknown. Follow RB-900; contact sre-oncall."}},
+    ]
+    ok, message = validate_v7_summary_safe(trace)
+    assert ok is False
+    assert message == "hallucinated_number_500"
+
+    trace[-1]["step"]["text"] = (
+        "SEV3: Elevated error rate in us-west began 27 minutes ago. "
+        "Root cause is unknown. Follow RB-900; contact sre-oncall."
+    )
+    assert validate_v7_summary_safe(trace) == (True, "ok")
 
 
 # --- V8 Summary Length ---

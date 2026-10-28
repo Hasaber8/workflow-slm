@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import sys
 from typing import Any, Dict, List, Optional
+from exp.prompts import load_sop_prompt
 from exp.data.split import scenario_from_dict
 from exp.runtime.clients import FakeClient, GeminiClient, LocalHfClient, VllmClient
 from exp.runtime.loop import canonical_json, run
@@ -182,7 +183,7 @@ def main():
         print(f"Injected error plan: {call_key} will fail {cnt} time(s)")
 
     # 3. Select client
-    sop_prompt = SOP_FILE.read_text(encoding="utf-8")
+    sop_prompt = load_sop_prompt(SOP_FILE)
     if model_choice == "oracle":
         client = FakeClient(response_fn=create_oracle_teacher_responder(scen))
     elif model_choice == "gemini":

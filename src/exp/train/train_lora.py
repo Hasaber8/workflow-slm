@@ -17,6 +17,7 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from exp.config import load_config
+from exp.train.build_sft import validate_sft_file
 
 SFT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "artifacts" / "sft"
 ADAPTERS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "artifacts" / "adapters" / "triage_v1"
@@ -129,7 +130,6 @@ def train_qlora(
     limit: Optional[int] = None,
     dry_run: bool = False,
 ):
-    ADAPTERS_DIR.mkdir(parents=True, exist_ok=True)
     cfg = load_config()
     base_model = cfg.get("local", {}).get("base_model", "Qwen/Qwen2.5-3B-Instruct")
     train_file = SFT_DIR / "train.jsonl"
@@ -137,6 +137,9 @@ def train_qlora(
     if not train_file.exists():
         from exp.train.build_sft import build_sft_dataset
         build_sft_dataset()
+
+    validate_sft_file(train_file)
+    ADAPTERS_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"=== Starting QLoRA Fine-Tuning Pipeline ===")
     print(f"Base Model: {base_model}")

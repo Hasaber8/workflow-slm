@@ -11,6 +11,17 @@ SFT_DIR = Path(__file__).resolve().parent.parent.parent.parent / "artifacts" / "
 RARE_ROOT_CAUSES = {"credential_failure", "db_pool_exhausted", "unknown"}
 
 
+def validate_sft_file(path: Path) -> None:
+    if path.is_file():
+        with open(path, "r", encoding="utf-8") as f:
+            if any(line.strip() for line in f):
+                return
+    raise ValueError(
+        f"Training dataset is missing or empty: {path}. "
+        "Generate passing teacher traces, then run make sft before training."
+    )
+
+
 def build_sft_dataset(
     workflow_id: str = "incident_triage_v1",
     oversample_rare: bool = True
@@ -18,6 +29,9 @@ def build_sft_dataset(
     SFT_DIR.mkdir(parents=True, exist_ok=True)
     pass_file = TRACES_DIR / "train_pass.jsonl"
     train_scens_file = DATA_DIR / "train.jsonl"
+
+    if not pass_file.is_file():
+        raise ValueError(f"Accepted teacher traces not found: {pass_file}. Run make traces successfully first.")
 
     scen_alerts = {}
     if train_scens_file.exists():
@@ -69,6 +83,12 @@ def build_sft_dataset(
             # Repeat accepted traces from rare branches once if enabled
             if oversample_rare and root_cause in RARE_ROOT_CAUSES:
                 rows.append({"id": f"{scen_id}_oversample", "messages": messages})
+
+    if not rows:
+        raise ValueError(
+            f"No training examples found in {pass_file}. Run make traces successfully first; "
+            "check artifacts/traces/train_fail.jsonl for errors. Existing SFT data was not overwritten."
+        )
 
     out_file = SFT_DIR / "train.jsonl"
     with open(out_file, "w", encoding="utf-8") as f:

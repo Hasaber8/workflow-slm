@@ -39,7 +39,10 @@ Regions: `us-east`, `us-west`, `eu-west`, `ap-south`.
 The first step MUST always be `extract_alert`.
 
 1. `service`: Resolve from aliases to the exact catalog service name.
+   - Use the alias reference below, matching names case-insensitively. Prefer a complete alias over a shared generic word such as "service" or "api".
+   - Alert text can contain adjacent-letter transposition typos. Recover an obvious typo in an alias only when the surrounding words identify a unique catalog service; do not require a perfectly spelled alias.
    - If the service is outside the catalog (e.g. `billing-worker`) or ambiguous, set to `null`.
+   - If multiple services are mentioned without a clearly identified affected service, set to `null`; do not guess from dependencies, region, or the symptom.
 2. `symptom`: Must be one of the enum values:
    - `high_error_rate`: 5xx errors, HTTP 500/502/503 spikes, failure rates, exceptions.
    - `high_latency`: slow responses, latency spike, p99/p95 latency degradation.
@@ -50,9 +53,13 @@ The first step MUST always be `extract_alert`.
    - `service_down`: outage, total service unavailability, healthcheck failures.
    - If no identifiable symptom is stated, set to `null`.
 3. `region`: Must be one of `us-east`, `us-west`, `eu-west`, `ap-south`, or `null` if omitted.
+   - Normalize the region aliases below to their canonical values, including numbered cloud regions and geographic aliases. Do not discard an explicit region merely because its spelling is not a schema enum value.
+   - If the region is missing, unsupported, or ambiguous, set to `null`; never infer it from the service or a timestamp.
 4. `started_at`: Absolute ISO UTC timestamp (e.g. `2026-10-22T15:30:00Z`) only if the alert explicitly states an absolute UTC time. Otherwise `null`.
 5. `started_minutes_ago`: Integer minute count only if the alert states a relative time (e.g. "12 min ago" -> 12, "an hour ago" -> 60, "half an hour" -> 30). Otherwise `null`.
 6. DO NOT convert between relative time and absolute timestamp.
+
+{{ALIAS_CATALOG}}
 
 ---
 
@@ -139,6 +146,7 @@ The step immediately following `conclude` and its `TOOL_RESULT: {"tool":"decisio
    - `transient_noise`: "noise", "transient", or "recovered"
    - `unknown`: "unknown", "inconclusive", or "escalat"
 3. Safety: MUST cite only service names, IDs, and numbers that appeared in the extraction, tool results, or decision message.
+   - An unverified number in the raw alert is not a measured fact. Do not repeat HTTP status codes, counts, or percentages from the alert unless they also appear in the extraction, tool results, or decision. Use the normalized symptom description instead.
 4. Length: Must be under 700 characters.
 
 ---

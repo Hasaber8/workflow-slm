@@ -70,14 +70,59 @@ Instead of pasting a [6,000+ token SOP](src/exp/prompts/sop.md) into a frontier 
 
 ## Quickstart
 
+### Install Dependencies
+
+Requires `make` and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Setup creates a Python 3.11 environment (or reuses `venv/`) and installs the
+project plus the PyTorch, Transformers, PEFT, Accelerate, and bitsandbytes
+dependencies used for local inference and QLoRA training:
+
+```bash
+make setup
+source venv/bin/activate
+```
+
+The GPU packages require several GB of downloads. Local 4-bit inference and
+training require a compatible NVIDIA GPU and driver; setup does not download
+model weights or trained adapters.
+
+For only the core/API dependencies and CPU-only tests, use `make setup EXTRAS=`.
+For the optional vLLM server (`make serve`), use `make setup EXTRAS=local,serve`.
+These commands also work when `venv/` already exists.
+
+### Sign In to the Codex Teacher
+
+The default teacher is **GPT-6.1 Terra** (`gpt-6.1-terra`) through the official
+[Codex CLI](https://developers.openai.com/codex/cli/) (tested with 0.165.0).
+Install the native CLI inside your Linux/WSL environment, then sign in with your
+ChatGPT subscription during setup or separately:
+
+```bash
+make setup LOGIN=1
+# Or, if dependencies are already installed:
+make login
+```
+
+Login prints a device code and browser URL. Complete the sign-in yourself;
+do not paste credentials or the code into chat. If device login is unavailable
+for your account, use `make login LOGIN_ARGS=` for the normal browser flow.
+`codex login status` checks the result. This uses subscription allowances and
+requires model access on your plan; it is not unlimited or an OpenAI API credit.
+Python setup does not install the Codex CLI itself.
+
 ### 1. Run the Full Test Suite
-Runs all 65 unit, simulator, and oracle property tests (~0.15s, no network or GPU needed):
+Runs the unit, setup, simulator, and oracle property tests (no network or GPU needed):
 ```bash
 make test
 ```
 
+Generator tests write to temporary directories, not your real scenario splits
+or log bank. The separate `make data` and `make smoke` commands intentionally
+write artifacts; do not run them alongside a teacher trace run.
+
 ### 2. Run the End-to-End Pipeline
-Executes data generation, teacher traces, SFT assembly, adapter training, baseline evaluation, and report generation:
+Runs an offline simulator pipeline check using oracle traces and placeholder
+adapter metadata. It does not train model weights or call hosted APIs:
 ```bash
 make smoke
 ```
@@ -140,6 +185,66 @@ See how the system behaves when diagnostic tools fail:
 
 To compile the incident triage SOP directly into model weights:
 
+First generate scenarios with `make data`, then choose a trace source:
+
+- **Codex teacher (default):** sign in using `make login`, then run
+  `make traces TRACE_ARGS="--limit 5"` to verify GPT-6.1 Terra access and output
+  before the full batch. `make traces` targets all 4,000 training scenarios.
+  It uses ten scenario workers by default; override with `--workers 1` for serial
+  runs or another positive worker count. Each scenario still executes its turns
+  sequentially. The teacher is remote, so local CPU/GPU utilization does not
+  measure available inference capacity. A full run may exceed subscription allowances.
+- **Gemini teacher (previous default):** export `GEMINI_API_KEY`, then run
+  `make traces TRACE_ARGS="--provider gemini --model gemini-2.5-pro --limit 5"`.
+  This uses the separately billed Gemini API. A `.env` file is not loaded automatically.
+- **Deterministic oracle (no API):** run `make traces TRACE_ARGS=--oracle`.
+  These are simulator/oracle demonstrations, not frontier-model teacher traces,
+  so this is a different training-data source from the Gemini experiment.
+
+Codex runs in a temporary directory with a read-only sandbox, tool features
+disabled, and JSON-schema output. It requires ChatGPT authentication and does
+not fall back to an API key. Set `teacher.model` in `config/config.yaml` or pass
+`--model` to choose another model available to your subscription. User Codex
+configuration/rules are not loaded for teacher completions.
+
+Accepted traces are checkpointed after each scenario. Rerun the same command to
+resume; increasing `--limit` reuses matching completed scenarios. Authentication,
+quota, timeout, and CLI failures stop the batch instead of failing thousands of
+scenarios: no new scenarios are scheduled after a Codex failure, but all already
+submitted workers are drained and their successful traces checkpointed before
+the batch exits. Run only one trace process per output directory.
+Saved accepted traces are revalidated with the current validators on resume.
+Existing accepted traces from a different teacher, dataset, SOP, or
+Codex version are not mixed in: back them up first, then explicitly pass `--fresh`
+to replace the trace files. Switching between Codex, Gemini, and oracle also
+requires this explicit fresh run when accepted traces already exist.
+
+Trace metadata records the teacher model/source. New Codex-trained results are
+not the published Gemini-teacher experiment. Baseline API clients remain Gemini.
+
+The SOP is a template: `exp.prompts.load_sop_prompt()` renders its service/region
+reference from `src/exp/world/aliases.py`, the same catalog used by alert generation.
+All runtime, teacher, and evaluation prompt loaders use this rendered SOP, and
+resume fingerprints include the expanded alias reference. Alias guidance never
+includes scenario labels or expected answers, and model extractions are not
+silently repaired. Missing/ambiguous fields remain `null`. Summaries may only use
+numbers from normalized extraction, tool results, or policy decisions—not
+unverified numbers copied from the original alert.
+Each trace run saves the exact expanded prompt as `artifacts/traces/sop_rendered.md`
+and its SHA-256 in `summary.json` for comparison and reproducibility.
+
+See [the Codex teacher pilot](docs/CODEX_PILOT.md) for the measured 100-scenario
+result and known limitations. This is a teacher-data acceptance result, not a
+fine-tuned model benchmark.
+
+Only continue after traces succeed:
+
+```bash
+make sft && make train
+```
+
+Missing credentials and missing/empty training data cause an early error.
+
 1. **Dataset Assembly**:
    4,000 teacher traces are converted into 5,116 multi-turn SFT conversation turns with rare-branch oversampling (`artifacts/sft/train.jsonl`). Gradients are computed strictly on assistant turns and the `<|im_end|>` stop token (inputs and tool results are masked to `-100`).
 
@@ -201,6 +306,9 @@ For fully air-gapped on-premise execution, local inference cost is evaluated by:
 
 ## Makefile Reference
 
+- `make setup`: Install core and local-model dependencies into `venv/`.
+- `make setup LOGIN=1`: Install dependencies, then sign in to Codex.
+- `make login`: Sign in to Codex using your ChatGPT account (device-code flow).
 - `make test`: Run all unit, oracle, and structural tests.
 - `make smoke`: Run the complete end-to-end smoke test pipeline.
 - `make data`: Generate scenario splits and log banks.
@@ -211,3 +319,10 @@ For fully air-gapped on-premise execution, local inference cost is evaluated by:
 - `make eval`: Run free-run and teacher-forced evaluations.
 - `make ablate`: Run all 4 ablation experiments.
 - `make report`: Update `docs/REPORT.md`.
+
+Teacher-forced evaluation reports extraction, tool calls, conclusions, and
+summary validation separately in `phases`, as well as workflow branch accuracy.
+Each step is scored against an oracle prefix independently of earlier model
+mistakes. Summary text is checked for required facts, grounding, and length,
+not exact string equality. Oracle evaluation creates a separate responder for
+each scenario; compiled-model evaluation uses the workflow ID in both modes.

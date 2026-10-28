@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import sys
 import time
+from exp.prompts import load_sop_prompt
 from exp.baselines.run_baseline import run_baseline_on_split
 from exp.data.split import generate_all_splits, scenario_from_dict
 from exp.eval.report import generate_report
@@ -43,7 +44,7 @@ def run_smoke_pipeline():
 
     # Step 4: Run Baseline A & B evaluations on test split (10 scenarios)
     print("\n--- Step 4: Running Baseline evaluations on test split ---")
-    sop_prompt = SOP_FILE.read_text(encoding="utf-8")
+    sop_prompt = load_sop_prompt(SOP_FILE)
     test_scenarios = splits["test"]
 
     # Emulate Baseline B using oracle client
